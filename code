@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Cannibal County</title>
+    <style>
+        canvas {
+            border: 1px dashed green;
+        }
+
+        #gameTitle {
+            font-family: courier new;
+            color: limegreen;
+            background-color: black;
+            font-size: 50px;
+            border: 2px dashed yellow;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="gameTitle">Cannibal County</div>
+    <canvas id="gameCanvas" width="800" height="800"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const backgroundImage = new Image();
+        backgroundImage.src = "https://i.ibb.co/VQMm0mL/31007-extra-3432-3432.jpg";
+
+        const playerImage = new Image();
+        playerImage.src = "https://i.ibb.co/FWmzqPy/survivor-idle-rifle-0.png";
+
+        const enemyImage = new Image();
+        enemyImage.src = "https://i.ibb.co/5sKzpwL/skeleton-attack-0-3085633516.png";
+
+        const bloodImage = new Image();
+        bloodImage.src = "https://i.ibb.co/xFVH07f/R.png";
+
+        const healthImage = new Image();
+        healthImage.src = "https://i.ibb.co/5cXwwLM/clipart-syringe-needle-1.webp";
+
+        const armorImage = new Image();
+        armorImage.src = "https://i.ibb.co/cyDkbz9/armor.png";
+
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 64,
+            height: 64,
+            angle: 0,
+            health: 100,
+            armor: 100
+        };
+
+        const bullets = [];
+        const enemies = [];
+        const bloodSplatters = [];
+        const powerUps = [];
+        let score = 0;
+        let keys = {};
+        let isPaused = false;
+
+        function togglePause() {
+            isPaused = !isPaused;
+            if (!isPaused) {
+                // Resume the game loop only if it was previously paused
+                requestAnimationFrame(update);
+            }
+        }
+
+        canvas.addEventListener('click', shootBullet);
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('keydown', (event) => {
+            if ((event.key === 'p' || event.key === 'P')) {
+                togglePause();
+            }
+        });
+
+        function handleKeyDown(event) {
+            keys[event.key] = true;
+        }
+
+        function handleKeyUp(event) {
+            keys[event.key] = false;
+        }
+
+        function handleMouseMove(event) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        }
+
+        function shootBullet() {
+            const bullet = {
+                x: player.x,
+                y: player.y,
+                width: 5,
+                height: 5,
+                angle: player.angle,
+                speed: 6
+            };
+            bullets.push(bullet);
+        }
+
+        function createEnemy() {
+            const enemy = {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                width: 64,
+                height: 64,
+                speed: Math.random() * 2 + 1,
+                angle: 0,
+                damage: 1
+            };
+            enemies.push(enemy);
+        }
+
+        function createPowerUp() {
+            const powerUpType = Math.random() < 0.5 ? 'health' : 'armor';
+            const powerUp = {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                width: 30,
+                height: 30,
+                type: powerUpType
+            };
+            powerUps.push(powerUp);
+        }
+
+        function update() {
+            if (keys['w']) {
+                player.y -= 2;
+            }
+            if (keys['a']) {
+                player.x -= 2;
+            }
+            if (keys['s']) {
+                player.y += 2;
+            }
+            if (keys['d']) {
+                player.x += 2;
+            }
+            if (isPaused) {
+                ctx.fillStyle = 'pink';
+                ctx.font = '40px courier new';
+                ctx.fillText('Paused', canvas.width / 2 - 100, canvas.height / 2);
+                return;
+            }
+
+            // Move bullets
+            bullets.forEach((bullet) => {
+                bullet.x += Math.cos(bullet.angle) * bullet.speed;
+                bullet.y += Math.sin(bullet.angle) * bullet.speed;
+            });
+
+            // Move enemies towards the player
+            enemies.forEach((enemy) => {
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                enemy.angle = Math.atan2(dy, dx);
+                enemy.x += Math.cos(enemy.angle) * enemy.speed;
+                enemy.y += Math.sin(enemy.angle) * enemy.speed;
+            });
+
+            // Move power-ups
+            powerUps.forEach((powerUp) => {
+                const dx = player.x - powerUp.x;
+                const dy = player.y - powerUp.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < player.width / 2 + powerUp.width / 2) {
+                    if (powerUp.type === 'health') {
+                        player.health = Math.min(player.health + 20, 100);
+                    } else if (powerUp.type === 'armor') {
+                        player.armor = Math.min(player.armor + 20, 100);
+                    }
+                    powerUps.splice(powerUps.indexOf(powerUp), 1);
+                }
+            });
+
+            // Check enemy-player collisions
+            enemies.forEach((enemy) => {
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < player.width / 2 + enemy.width / 2) {
+                    if (player.armor > 0) {
+                        player.armor -= enemy.damage;
+                    } else {
+                        player.health -= enemy.damage;
+                    }
+                }
+            });
+
+            // Check bullet-enemy collisions and create blood splatters
+            bullets.forEach((bullet, bulletIndex) => {
+                enemies.forEach((enemy, enemyIndex) => {
+                    const dx = bullet.x - enemy.x;
+                    const dy = bullet.y - enemy.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < bullet.width / 2 + enemy.width / 2) {
+                        bullets.splice(bulletIndex, 1);
+                        enemies.splice(enemyIndex, 1);
+                        score += 1;
+                        createBloodSplatter(enemy.x, enemy.y);
+                    }
+                });
+            });
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the background image
+            ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+
+            // Draw the player image
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
+            ctx.drawImage(
+                playerImage,
+                -player.width / 2,
+                -player.height / 2,
+                player.width,
+                player.height
+            );
+            ctx.restore();
+
+            // Draw bullets
+            bullets.forEach((bullet) => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.width / 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'orange';
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw enemies
+            enemies.forEach((enemy) => {
+                ctx.save();
+                ctx.translate(enemy.x, enemy.y);
+                ctx.rotate(enemy.angle);
+                ctx.drawImage(
+                    enemyImage,
+                    -enemy.width / 2,
+                    -enemy.height / 2,
+                    enemy.width,
+                    enemy.height
+                );
+                ctx.restore();
+            });
+
+            // Draw power-ups
+            powerUps.forEach((powerUp) => {
+                ctx.drawImage(
+                    powerUp.type === 'health' ? healthImage : armorImage,
+                    powerUp.x - powerUp.width / 2,
+                    powerUp.y - powerUp.height / 2,
+                    powerUp.width,
+                    powerUp.height
+                );
+            });
+
+            // Draw Blood Splatters
+            bloodSplatters.forEach((blood) => {
+                blood.alpha -= 0.01;
+                if (blood.alpha <= 0) {
+                    bloodSplatters.splice(bloodSplatters.indexOf(blood), 1);
+                } else {
+                    ctx.globalAlpha = blood.alpha;
+                    ctx.drawImage(bloodImage, blood.x, blood.y, blood.width, blood.height);
+                    ctx.globalAlpha = 1;
+                }
+            });
+
+            // Draw the life bar
+            ctx.fillStyle = 'red';
+            ctx.fillRect(10, 10, player.health, 10);
+
+            // Draw the armor bar
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(10, 25, player.armor, 10);
+
+            // Display the score
+            ctx.fillStyle = 'yellow';
+            ctx.font = '23px chiller';
+            ctx.fillText('Score: ' + score, 10, 60);
+
+            // Check player health
+            if (player.health <= 0) {
+                ctx.fillStyle = 'red';
+                ctx.font = '30px Chiller';
+                ctx.fillText('YOU GOT EATEN FOOL!', canvas.width / 2 - 150, canvas.height / 2);
+            } else {
+                requestAnimationFrame(update);
+            }
+        }
+
+        function createBloodSplatter(x, y) {
+            for (let i = 0; i < 10; i++) {
+                bloodSplatters.push({
+                    x: x,
+                    y: y,
+                    width: 30 + Math.random() * 10,
+                    height: 30 + Math.random() * 8,
+                    alpha: 1
+                });
+            }
+        }
+
+        setInterval(createEnemy, 1000);
+        setInterval(createPowerUp, 10000);
+
+        update();
+    </script>
+</body>
+
+</html>
